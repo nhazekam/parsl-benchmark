@@ -58,22 +58,22 @@ class Task():
 
 
 # Sequential start/wait on jobs to test timing.
-def run_sequential_workflow(num_processes):
+def run_sequential_workflow(num_processes, task=quick_task):
   start_time = time.time()
   for i in range(num_processes):
     #TODO: change that back
-    f = quick_task(num_processes)
+    f = task(num_processes)
     f.result()
   end_time = time.time()
   return end_time - start_time
 
 
 # Parallel workflow
-def run_parallel_workflow(num_processes):
+def run_parallel_workflow(num_processes, task=long_task):
   jobs = []
   start_time = time.time()
   for i in range(num_processes):
-    jobs.append(long_task(num_processes))
+    jobs.append(task(num_processes))
   for j in jobs:
     j.result()
   end_time = time.time()
@@ -187,6 +187,43 @@ def test_parsl_config(plot_label, config, timing_function, task_batch_sizes):
   parsl.clear()
 
 
+def test_parsl(plot_label, config, timing_function, task_function,
+               task_batch_sizes):
+  parsl.load(config)
+  fig, axes = plt.subplots(1, 1)
+  axes.set_xlabel("Number of tasks")
+  axes.set_ylabel("Time elapsed (s)")
+  parallel_time_by_jobs = []
+  for s in task_batch_sizes:
+    print("Starting to execute {} tasks".format(s))
+    t = timing_function(s, task_function)
+    print("{} jobs in {}s.".format(s, t))
+    parallel_time_by_jobs.append(t)
+  axes.plot(task_batch_sizes, parallel_time_by_jobs)
+  plt.tight_layout()
+  plt.savefig(plot_label)
+  parsl.clear()
+
+
+def select_config(config_str):
+  if config_str == "condor":
+    return condor_config
+  if config_str == "wq":
+    return wq_config
+  return local_config
+
+
+def select_function(function_str):
+  if function_str == "cpu_long":
+    return long_task
+  return quick_task
+
+def select_parallelization(parallelization_str):
+  if parallelization_str == "parallel":
+    return run_parallel_workflow
+  return run_sequential_workflow
+
+
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Testing benchmark for parsl lib.")
   
@@ -208,12 +245,28 @@ if __name__ == "__main__":
   parser.add_argument('--test_wq_parallel', dest="test_wq_parallel", action="store_const",
                     const=test_wq_parallel, default=None)
 
-  
+  parser.add_argument('--config', dest='config', default='',
+                      help='Parsl configuration to apply.')
+  parser.add_argument('--function', dest='function', default='',
+                      help='Testing function to apply.')
+  parser.add_argument('--parallelization', dest='parallelization',
+			default='',
+                        help='Run test in parallel or sequence')
+ 
+  parser.add_argument('-o', dest='output_filename', default='out.png',
+                       help='output filename') 
   args = parser.parse_args()
 
   #task_batch_sizes = list(map(int, args.num_task_list.split(",")))
   task_batch_sizes = args.num_task_list
   print(task_batch_sizes)
+
+  config_obj = select_config(args.config)
+  function_obj = select_function(args.function)
+  parallelization_obj = select_parallelization(args.parallelization)
+
+  test_parsl(args.output_filename, config_obj,
+             parallelization_obj, function_obj, task_batch_sizes)
 
   if args.test_local_sequential:
     args.test_local_sequential(task_batch_sizes)
