@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 import parsl
 from parsl.app.app import python_app
 from parsl.config import Config
